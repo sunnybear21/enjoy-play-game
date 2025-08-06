@@ -1,1 +1,333 @@
 
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>컬러 스택</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Gaegu', cursive;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-color: #1a202c; /* A dark background for the game */
+      }
+      /* Prevent text selection on the game board */
+      .no-select {
+        -webkit-touch-callout: none; /* iOS Safari */
+        -webkit-user-select: none; /* Safari, Chrome, Opera, Edge */
+        -khtml-user-select: none; /* Konqueror HTML */
+        -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+        user-select: none; /* Non-prefixed version, currently supported by Chrome, Opera and Firefox */
+      }
+    </style>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Babel to transpile JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- React and Game Logic -->
+    <script type="text/babel" data-type="module">
+      import React, { useState, useEffect, useCallback, useRef } from 'https://esm.sh/react@^19.1.1';
+      import ReactDOM from 'https://esm.sh/react-dom@^19.1.1/client';
+
+      // --- From constants.ts ---
+      const BOARD_WIDTH = 6;
+      const BOARD_HEIGHT = 10;
+      const MATCH_THRESHOLD = 5;
+
+      const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+
+      const ORB_COLORS = {
+        red: 'bg-red-500',
+        blue: 'bg-blue-500',
+        green: 'bg-green-500',
+        yellow: 'bg-yellow-400',
+        purple: 'bg-purple-500',
+      };
+
+      const DROP_INTERVAL = 500;
+
+      // --- From App.tsx ---
+      const createEmptyBoard = () => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
+
+      const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+
+      function App() {
+        const [board, setBoard] = useState(createEmptyBoard());
+        const [currentOrb, setCurrentOrb] = useState(null);
+        const [nextOrbColor, setNextOrbColor] = useState(getRandomColor());
+        const [score, setScore] = useState(0);
+        const [isGameOver, setIsGameOver] = useState(false);
+        
+        const gameLoopRef = useRef(null);
+
+        const createNewOrb = useCallback(() => {
+          const newColor = nextOrbColor;
+          const newOrb = { x: Math.floor(BOARD_WIDTH / 2), y: 0, color: newColor };
+          
+          if (board[newOrb.y][newOrb.x]) {
+            setIsGameOver(true);
+            if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+            return;
+          }
+          
+          setCurrentOrb(newOrb);
+          setNextOrbColor(getRandomColor());
+        }, [board, nextOrbColor]);
+        
+        const checkForMatchesAndClear = useCallback((boardToCheck) => {
+          let newBoard = boardToCheck.map(r => [...r]);
+          let totalCleared = 0;
+          let combo = 1;
+
+          const checkAndClear = () => {
+              let boardAfterClears = newBoard.map(r => [...r]);
+              let clearedInThisPass = 0;
+              
+              const toClear = new Set();
+              const visited = new Set();
+
+              for (let y = 0; y < BOARD_HEIGHT; y++) {
+                  for (let x = 0; x < BOARD_WIDTH; x++) {
+                      const color = boardAfterClears[y][x];
+                      if (!color || visited.has(`${y},${x}`)) continue;
+
+                      const q = [[y,x]];
+                      const component = [[y,x]];
+                      const visitedInComponent = new Set([`${y},${x}`]);
+                      
+                      while(q.length > 0){
+                          const [curY, curX] = q.shift();
+                          
+                          [[0,1], [0,-1], [1,0], [-1,0]].forEach(([dy, dx]) => {
+                              const newY = curY + dy;
+                              const newX = curX + dx;
+                              if(newY >= 0 && newY < BOARD_HEIGHT && newX >= 0 && newX < BOARD_WIDTH &&
+                                boardAfterClears[newY][newX] === color && !visitedInComponent.has(`${newY},${newX}`)){
+                                  visitedInComponent.add(`${newY},${newX}`);
+                                  q.push([newY, newX]);
+                                  component.push([newY, newX]);
+                              }
+                          });
+                      }
+                      
+                      if (component.length >= MATCH_THRESHOLD) {
+                          component.forEach(([clearY, clearX]) => toClear.add(`${clearY},${clearX}`));
+                      }
+                      visitedInComponent.forEach(coord => visited.add(coord));
+                  }
+              }
+              
+              if (toClear.size > 0) {
+                  clearedInThisPass = toClear.size;
+                  totalCleared += clearedInThisPass * combo;
+                  combo++;
+
+                  toClear.forEach(coord => {
+                      const [clearY, clearX] = coord.split(',').map(Number);
+                      boardAfterClears[clearY][clearX] = null;
+                  });
+
+                  // Gravity
+                  for (let x = 0; x < BOARD_WIDTH; x++) {
+                      let emptyRow = BOARD_HEIGHT - 1;
+                      for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                          if (boardAfterClears[y][x]) {
+                              if (y !== emptyRow) {
+                                [boardAfterClears[emptyRow][x], boardAfterClears[y][x]] = [boardAfterClears[y][x], boardAfterClears[emptyRow][x]];
+                              }
+                              emptyRow--;
+                          }
+                      }
+                  }
+                  newBoard = boardAfterClears;
+                  return true; // Found and cleared matches
+              }
+              return false; // No matches found
+          };
+
+          let keepChecking = true;
+          while(keepChecking){
+              keepChecking = checkAndClear();
+          }
+          
+          setScore(s => s + totalCleared * 10);
+          setBoard(newBoard);
+        }, []);
+        
+        const placeOrb = useCallback((orbToPlace) => {
+            let landingY = BOARD_HEIGHT - 1;
+            while (landingY >= 0 && board[landingY][orbToPlace.x]) {
+              landingY--;
+            }
+
+            if (landingY < 0) {
+              setIsGameOver(true);
+              return;
+            }
+            
+            const newBoard = board.map(row => [...row]);
+            newBoard[landingY][orbToPlace.x] = orbToPlace.color;
+            
+            setCurrentOrb(null);
+            checkForMatchesAndClear(newBoard);
+        }, [board, checkForMatchesAndClear]);
+
+        // Game Loop
+        useEffect(() => {
+          if (isGameOver) {
+            if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+            return;
+          }
+          if (!currentOrb) {
+            setTimeout(createNewOrb, 100);
+            return;
+          }
+          
+          gameLoopRef.current = setInterval(() => {
+            setCurrentOrb(orb => {
+              if (!orb) return null;
+              let landingY = BOARD_HEIGHT - 1;
+              while (landingY >= 0 && board[landingY][orb.x]) {
+                landingY--;
+              }
+
+              if (orb.y >= landingY) {
+                placeOrb(orb);
+                return null;
+              }
+              return { ...orb, y: orb.y + 1 };
+            });
+          }, DROP_INTERVAL);
+
+          return () => {
+            if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+          };
+        }, [currentOrb, isGameOver, board, createNewOrb, placeOrb]);
+        
+        // Input Handler
+        useEffect(() => {
+          const handleKeyDown = (e) => {
+            if (isGameOver || !currentOrb) return;
+            let newX = currentOrb.x;
+            if (e.key === 'ArrowLeft') newX--;
+            if (e.key === 'ArrowRight') newX++;
+            if (e.key === 'ArrowDown') {
+                if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+                placeOrb(currentOrb);
+                return;
+            }
+            if (newX >= 0 && newX < BOARD_WIDTH && !board[0][newX]) {
+              setCurrentOrb({ ...currentOrb, x: newX });
+            }
+          };
+          window.addEventListener('keydown', handleKeyDown);
+          return () => window.removeEventListener('keydown', handleKeyDown);
+        }, [currentOrb, isGameOver, placeOrb, board]);
+
+        const handleColumnClick = (colIndex) => {
+          if (isGameOver || !currentOrb) return;
+          if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+          const orbToPlace = { ...currentOrb, x: colIndex };
+          placeOrb(orbToPlace);
+        };
+
+        const restartGame = () => {
+          setBoard(createEmptyBoard());
+          setScore(0);
+          setIsGameOver(false);
+          setCurrentOrb(null);
+          setNextOrbColor(getRandomColor());
+        };
+
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select">
+            <h1 className="text-5xl font-bold mb-4 text-purple-400">컬러 스택</h1>
+            
+            <div className="flex items-start gap-8">
+              <div 
+                className="relative grid gap-1 bg-gray-800 p-2 rounded-lg shadow-2xl"
+                style={{
+                  gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
+                }}
+              >
+                {board.map((row, y) => 
+                  row.map((cell, x) => (
+                    <div 
+                      key={`${y}-${x}`} 
+                      className="w-12 h-12 bg-gray-700/50 rounded-full flex items-center justify-center cursor-pointer"
+                      onClick={() => handleColumnClick(x)}
+                    >
+                      {cell && <div className={`w-11 h-11 ${ORB_COLORS[cell]} rounded-full shadow-inner`}></div>}
+                    </div>
+                  ))
+                )}
+                {currentOrb && (
+                  <div 
+                      className="absolute w-12 h-12 flex items-center justify-center transition-all duration-75"
+                      style={{
+                        top: `${8 + currentOrb.y * 52}px`,
+                        left: `${8 + currentOrb.x * 52}px`,
+                        pointerEvents: 'none'
+                      }}
+                    >
+                      <div className={`w-11 h-11 ${ORB_COLORS[currentOrb.color]} rounded-full shadow-lg`}></div>
+                  </div>
+                )}
+              </div>
+
+              <div className="w-48 flex flex-col gap-4">
+                <div className="bg-gray-800 p-4 rounded-lg text-center">
+                  <h2 className="text-xl font-bold mb-2 text-purple-300">점수</h2>
+                  <p className="text-4xl font-bold">{score}</p>
+                </div>
+                <div className="bg-gray-800 p-4 rounded-lg text-center">
+                  <h2 className="text-xl font-bold mb-2 text-purple-300">다음 블록</h2>
+                  <div className="flex justify-center items-center mt-2">
+                    <div className={`w-12 h-12 ${ORB_COLORS[nextOrbColor]} rounded-full shadow-lg`}></div>
+                  </div>
+                </div>
+                <button onClick={restartGame} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-xl transition-colors">
+                  다시 시작
+                </button>
+              </div>
+            </div>
+
+            {isGameOver && (
+              <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col justify-center items-center">
+                <h2 className="text-6xl font-bold text-red-500 mb-4">게임 종료</h2>
+                <p className="text-3xl mb-8">최종 점수: {score}</p>
+                <button onClick={restartGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
+                  다시 하기
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // --- From index.tsx ---
+      const rootElement = document.getElementById('root');
+      if (!rootElement) {
+        throw new Error("Could not find root element to mount to");
+      }
+
+      const root = ReactDOM.createRoot(rootElement);
+      root.render(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      );
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
