@@ -11,78 +11,41 @@
     <style>
       body {
         font-family: 'Gaegu', cursive;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
         background-color: #1a202c;
       }
       .no-select {
-        -webkit-touch-callout: none;
         -webkit-user-select: none;
-        -khtml-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
         user-select: none;
       }
       @keyframes shake {
         0%, 100% { transform: translateX(0); }
-        25% { transform: translateX(-4px); }
-        75% { transform: translateX(4px); }
+        50% { transform: translateX(-3px); }
       }
       @keyframes danger-shake {
-        0%, 100% { transform: translateX(0) translateY(0); }
-        10% { transform: translateX(-2px) translateY(-1px); }
-        20% { transform: translateX(2px) translateY(1px); }
-        30% { transform: translateX(-2px) translateY(-1px); }
-        40% { transform: translateX(2px) translateY(1px); }
-        50% { transform: translateX(-1px) translateY(-1px); }
-        60% { transform: translateX(1px) translateY(1px); }
-        70% { transform: translateX(-1px) translateY(-1px); }
-        80% { transform: translateX(1px) translateY(1px); }
-        90% { transform: translateX(0px) translateY(0px); }
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-1px); }
+        75% { transform: translateX(1px); }
       }
       @keyframes pop-effect {
         0% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.3); opacity: 0.7; }
         100% { transform: scale(0); opacity: 0; }
-      }
-      @keyframes combo-bounce {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.1); }
       }
       @keyframes float {
         0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
+        50% { transform: translateY(-8px); }
       }
-      @keyframes glow {
-        0%, 100% { box-shadow: 0 0 20px rgba(147, 51, 234, 0.5); }
-        50% { box-shadow: 0 0 40px rgba(147, 51, 234, 0.8); }
-      }
-      .shake {
-        animation: shake 0.5s ease-in-out;
-      }
-      .danger-shake {
-        animation: danger-shake 0.2s ease-in-out infinite;
-      }
-      .pop-effect {
-        animation: pop-effect 0.5s ease-out forwards;
-      }
-      .combo-bounce {
-        animation: combo-bounce 0.4s ease-in-out;
-      }
-      .float {
-        animation: float 3s ease-in-out infinite;
-      }
-      .glow {
-        animation: glow 2s ease-in-out infinite;
-      }
+      .shake { animation: shake 0.3s ease-in-out; }
+      .danger-shake { animation: danger-shake 0.15s ease-in-out infinite; }
+      .pop-effect { animation: pop-effect 0.3s ease-out forwards; }
+      .float { animation: float 2s ease-in-out infinite; }
       .danger-zone {
-        background: linear-gradient(135deg, #7f1d1d, #991b1b, #b91c1c);
-        box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+        background: linear-gradient(135deg, #7f1d1d, #991b1b);
+        box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
       }
       .title-gradient {
-        background: linear-gradient(45deg, #8b5cf6, #06b6d4, #10b981, #f59e0b, #ef4444);
-        background-size: 300% 300%;
-        animation: gradient-shift 3s ease infinite;
+        background: linear-gradient(45deg, #8b5cf6, #06b6d4, #10b981);
+        background-size: 200% 200%;
+        animation: gradient-shift 2s ease infinite;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -102,7 +65,7 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
     <script type="text/babel">
-      const { useState, useEffect, useCallback, useRef } = React;
+      const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
       // 게임 상수들
       const BOARD_WIDTH = 6;
@@ -122,117 +85,50 @@
       const GAME_STATES = {
         MENU: 'menu',
         PLAYING: 'playing',
-        PAUSED: 'paused',
         GAME_OVER: 'game_over'
       };
 
-      // 사운드 생성 함수들
-      const playDropSound = () => {
-        try {
-          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const oscillator = audioContext.createOscillator();
-          const gainNode = audioContext.createGain();
-          
-          oscillator.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-          
-          oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-          oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.15);
-          oscillator.type = 'sine';
-          
-          gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
-          
-          oscillator.start();
-          oscillator.stop(audioContext.currentTime + 0.15);
-        } catch (e) {
-          console.log('Sound not available');
-        }
-      };
-
-      const playMatchSound = (combo = 1) => {
-        try {
-          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const frequencies = [523, 659, 784, 988, 1175]; // C5, E5, G5, B5, D6
-          
-          for (let i = 0; i < Math.min(combo, 5); i++) {
-            setTimeout(() => {
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
-              oscillator.frequency.setValueAtTime(frequencies[i], audioContext.currentTime);
-              oscillator.type = 'triangle';
-              
-              gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-              
-              oscillator.start();
-              oscillator.stop(audioContext.currentTime + 0.3);
-            }, i * 100);
+      // 오디오 컨텍스트 싱글톤
+      let audioContext = null;
+      const getAudioContext = () => {
+        if (!audioContext) {
+          try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          } catch (e) {
+            console.log('Audio not supported');
           }
-        } catch (e) {
-          console.log('Sound not available');
         }
+        return audioContext;
       };
 
-      const playGameOverSound = () => {
-        try {
-          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const frequencies = [330, 277, 247, 220];
-          
-          frequencies.forEach((freq, i) => {
-            setTimeout(() => {
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
-              oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
-              oscillator.type = 'sawtooth';
-              
-              gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
-              
-              oscillator.start();
-              oscillator.stop(audioContext.currentTime + 0.6);
-            }, i * 200);
-          });
-        } catch (e) {
-          console.log('Sound not available');
-        }
+      // 최적화된 사운드 함수들
+      const playSound = (frequency, duration = 0.15, type = 'sine', volume = 0.1) => {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
+        oscillator.type = type;
+        
+        gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        
+        oscillator.start();
+        oscillator.stop(ctx.currentTime + duration);
       };
 
-      const playStartSound = () => {
-        try {
-          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const frequencies = [262, 330, 392, 523]; // C4, E4, G4, C5
-          
-          frequencies.forEach((freq, i) => {
-            setTimeout(() => {
-              const oscillator = audioContext.createOscillator();
-              const gainNode = audioContext.createGain();
-              
-              oscillator.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
-              oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
-              oscillator.type = 'triangle';
-              
-              gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-              
-              oscillator.start();
-              oscillator.stop(audioContext.currentTime + 0.4);
-            }, i * 150);
-          });
-        } catch (e) {
-          console.log('Sound not available');
-        }
+      const playDropSound = () => playSound(150, 0.1);
+      const playMatchSound = (combo = 1) => {
+        const baseFreq = 400 + (combo * 100);
+        playSound(baseFreq, 0.2, 'triangle', 0.12);
       };
+      const playGameOverSound = () => playSound(200, 0.5, 'sawtooth', 0.08);
+      const playStartSound = () => playSound(500, 0.3, 'triangle', 0.1);
 
       // 빈 보드 생성
       const createEmptyBoard = () => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
@@ -240,50 +136,49 @@
       // 랜덤 색상 선택
       const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
-      // 시작 화면 컴포넌트
-      function StartScreen({ onStart, soundEnabled, onToggleSound }) {
+      // 최적화된 시작 화면 컴포넌트
+      const StartScreen = React.memo(({ onStart, soundEnabled, onToggleSound }) => {
         return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select">
             <div className="text-center">
-              <h1 className="text-8xl font-bold mb-8 title-gradient">
+              <h1 className="text-7xl font-bold mb-8 title-gradient">
                 컬러 스택
               </h1>
               
-              <div className="flex justify-center gap-4 mb-8">
-                {COLORS.map((color, index) => (
+              <div className="flex justify-center gap-3 mb-8">
+                {COLORS.slice(0, 3).map((color, index) => (
                   <div 
                     key={color}
-                    className={`w-16 h-16 ${ORB_COLORS[color]} rounded-full shadow-lg float`}
-                    style={{animationDelay: `${index * 0.5}s`}}
+                    className={`w-12 h-12 ${ORB_COLORS[color]} rounded-full shadow-lg float`}
+                    style={{animationDelay: `${index * 0.3}s`}}
                   ></div>
                 ))}
               </div>
 
-              <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl mb-8 max-w-md mx-auto">
-                <h2 className="text-3xl font-bold mb-6 text-purple-400">게임 방법</h2>
-                <div className="text-left space-y-3 text-lg">
-                  <p>🎯 같은 색깔 구슬 <span className="text-yellow-400 font-bold">5개 이상</span> 연결하기</p>
-                  <p>⬅️➡️ 화살표 키로 구슬 이동</p>
-                  <p>⬇️ 화살표 키로 빠른 낙하</p>
-                  <p>🖱️ 마우스 클릭으로 위치 선택</p>
-                  <p>🔗 연쇄 반응으로 더 높은 점수!</p>
+              <div className="bg-gray-800 p-6 rounded-xl shadow-xl mb-6 max-w-sm mx-auto">
+                <h2 className="text-2xl font-bold mb-4 text-purple-400">게임 방법</h2>
+                <div className="text-left space-y-2 text-base">
+                  <p>🎯 같은 색깔 구슬 <span className="text-yellow-400 font-bold">5개 이상</span> 연결</p>
+                  <p>⬅️➡️ 화살표 키로 이동</p>
+                  <p>⬇️ 빠른 낙하</p>
+                  <p>🖱️ 클릭으로 위치 선택</p>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 items-center">
+              <div className="flex flex-col gap-3 items-center">
                 <button 
                   onClick={() => {
                     if (soundEnabled) playStartSound();
                     onStart();
                   }}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-4 px-12 rounded-2xl text-3xl transition-all transform hover:scale-105 glow"
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-3 px-8 rounded-xl text-2xl transition-colors"
                 >
                   🎮 게임 시작
                 </button>
                 
                 <button 
                   onClick={onToggleSound}
-                  className={`font-bold py-3 px-8 rounded-xl text-xl transition-colors ${
+                  className={`font-bold py-2 px-6 rounded-lg text-lg transition-colors ${
                     soundEnabled 
                       ? 'bg-green-600 hover:bg-green-700 text-white' 
                       : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
@@ -295,7 +190,7 @@
             </div>
           </div>
         );
-      }
+      });
 
       function App() {
         const [gameState, setGameState] = useState(GAME_STATES.MENU);
@@ -310,17 +205,20 @@
         const [clearingCells, setClearingCells] = useState(new Set());
         
         const gameLoopRef = useRef(null);
+        const lastUpdateRef = useRef(0);
 
-        // 위험 구역 체크 (상위 3줄에 구슬이 있으면)
-        useEffect(() => {
-          if (gameState === GAME_STATES.PLAYING) {
-            const dangerZoneCheck = board.slice(0, 3).some(row => row.some(cell => cell !== null));
-            setIsDangerZone(dangerZoneCheck);
-          }
+        // 위험 구역 체크 - 메모이제이션
+        const dangerZoneCheck = useMemo(() => {
+          if (gameState !== GAME_STATES.PLAYING) return false;
+          return board.slice(0, 3).some(row => row.some(cell => cell !== null));
         }, [board, gameState]);
 
+        useEffect(() => {
+          setIsDangerZone(dangerZoneCheck);
+        }, [dangerZoneCheck]);
+
         // 게임 시작
-        const startGame = () => {
+        const startGame = useCallback(() => {
           setGameState(GAME_STATES.PLAYING);
           setBoard(createEmptyBoard());
           setScore(0);
@@ -330,13 +228,13 @@
           setIsShaking(false);
           setIsDangerZone(false);
           setClearingCells(new Set());
-        };
+        }, []);
 
         // 메뉴로 돌아가기
-        const goToMenu = () => {
+        const goToMenu = useCallback(() => {
           setGameState(GAME_STATES.MENU);
           if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-        };
+        }, []);
 
         // 새 구슬 생성
         const createNewOrb = useCallback(() => {
@@ -348,9 +246,7 @@
           if (board[newOrb.y][newOrb.x]) {
             setGameState(GAME_STATES.GAME_OVER);
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
-            if (soundEnabled) {
-              playGameOverSound();
-            }
+            if (soundEnabled) playGameOverSound();
             return;
           }
           
@@ -358,135 +254,122 @@
           setNextOrbColor(getRandomColor());
         }, [board, nextOrbColor, soundEnabled, gameState]);
         
-        // 매치 확인 및 제거
+        // 최적화된 매치 확인 및 제거
         const checkForMatchesAndClear = useCallback((boardToCheck) => {
-          let newBoard = boardToCheck.map(r => [...r]);
+          let newBoard = [...boardToCheck.map(r => [...r])];
           let totalCleared = 0;
           let comboCount = 0;
 
-          const checkAndClear = () => {
-              let boardAfterClears = newBoard.map(r => [...r]);
+          const findConnectedGroup = (startY, startX, color, visited) => {
+            const stack = [[startY, startX]];
+            const group = [];
+            
+            while (stack.length > 0) {
+              const [y, x] = stack.pop();
+              const key = `${y},${x}`;
               
-              const toClear = new Set();
-              const visited = new Set();
-
-              for (let y = 0; y < BOARD_HEIGHT; y++) {
-                  for (let x = 0; x < BOARD_WIDTH; x++) {
-                      const color = boardAfterClears[y][x];
-                      if (!color || visited.has(`${y},${x}`)) continue;
-
-                      const q = [[y,x]];
-                      const component = [[y,x]];
-                      const visitedInComponent = new Set([`${y},${x}`]);
-                      
-                      while(q.length > 0){
-                          const [curY, curX] = q.shift();
-                          
-                          [[0,1], [0,-1], [1,0], [-1,0]].forEach(([dy, dx]) => {
-                              const newY = curY + dy;
-                              const newX = curX + dx;
-                              if(newY >= 0 && newY < BOARD_HEIGHT && newX >= 0 && newX < BOARD_WIDTH &&
-                                boardAfterClears[newY][newX] === color && !visitedInComponent.has(`${newY},${newX}`)){
-                                  visitedInComponent.add(`${newY},${newX}`);
-                                  q.push([newY, newX]);
-                                  component.push([newY, newX]);
-                              }
-                          });
-                      }
-                      
-                      if (component.length >= MATCH_THRESHOLD) {
-                          component.forEach(([clearY, clearX]) => toClear.add(`${clearY},${clearX}`));
-                      }
-                      visitedInComponent.forEach(coord => visited.add(coord));
-                  }
-              }
+              if (visited.has(key) || 
+                  y < 0 || y >= BOARD_HEIGHT || 
+                  x < 0 || x >= BOARD_WIDTH || 
+                  newBoard[y][x] !== color) continue;
               
-              if (toClear.size > 0) {
-                  comboCount++;
-                  totalCleared += toClear.size * comboCount;
-                  
-                  // 사라질 구슬들 표시
-                  setClearingCells(new Set(toClear));
-                  
-                  // 사운드 재생
-                  if (soundEnabled) {
-                    playMatchSound(comboCount);
-                  }
-                  
-                  // 화면 흔들기
-                  if (comboCount > 1) {
-                    setIsShaking(true);
-                    setTimeout(() => setIsShaking(false), 500);
-                  }
-                  
-                  setTimeout(() => {
-                    toClear.forEach(coord => {
-                        const [clearY, clearX] = coord.split(',').map(Number);
-                        boardAfterClears[clearY][clearX] = null;
-                    });
-
-                    // 중력 적용
-                    for (let x = 0; x < BOARD_WIDTH; x++) {
-                        let emptyRow = BOARD_HEIGHT - 1;
-                        for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
-                            if (boardAfterClears[y][x]) {
-                                if (y !== emptyRow) {
-                                  [boardAfterClears[emptyRow][x], boardAfterClears[y][x]] = [boardAfterClears[y][x], boardAfterClears[emptyRow][x]];
-                                }
-                                emptyRow--;
-                            }
-                        }
-                    }
-                    newBoard = boardAfterClears;
-                    setClearingCells(new Set());
-                    setBoard(newBoard);
-                  }, 400);
-
-                  return true;
-              }
-              return false;
+              visited.add(key);
+              group.push([y, x]);
+              
+              // 상하좌우 체크
+              stack.push([y-1, x], [y+1, x], [y, x-1], [y, x+1]);
+            }
+            
+            return group;
           };
 
-          let keepChecking = true;
-          while(keepChecking){
-              keepChecking = checkAndClear();
+          let hasMatches = true;
+          while (hasMatches) {
+            hasMatches = false;
+            const visited = new Set();
+            const toClear = new Set();
+
+            for (let y = 0; y < BOARD_HEIGHT; y++) {
+              for (let x = 0; x < BOARD_WIDTH; x++) {
+                const color = newBoard[y][x];
+                if (!color || visited.has(`${y},${x}`)) continue;
+
+                const group = findConnectedGroup(y, x, color, visited);
+                if (group.length >= MATCH_THRESHOLD) {
+                  group.forEach(([clearY, clearX]) => toClear.add(`${clearY},${clearX}`));
+                }
+              }
+            }
+
+            if (toClear.size > 0) {
+              hasMatches = true;
+              comboCount++;
+              totalCleared += toClear.size * comboCount;
+              
+              // 즉시 제거
+              toClear.forEach(coord => {
+                const [clearY, clearX] = coord.split(',').map(Number);
+                newBoard[clearY][clearX] = null;
+              });
+
+              // 중력 적용
+              for (let x = 0; x < BOARD_WIDTH; x++) {
+                let writePos = BOARD_HEIGHT - 1;
+                for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                  if (newBoard[y][x]) {
+                    if (y !== writePos) {
+                      newBoard[writePos][x] = newBoard[y][x];
+                      newBoard[y][x] = null;
+                    }
+                    writePos--;
+                  }
+                }
+              }
+            }
           }
-          
-          setCombo(comboCount);
-          setScore(s => s + totalCleared * 10);
+
+          if (comboCount > 0) {
+            setCombo(comboCount);
+            setScore(s => s + totalCleared * 10);
+            setBoard(newBoard);
+            
+            if (soundEnabled) playMatchSound(comboCount);
+            
+            if (comboCount > 1) {
+              setIsShaking(true);
+              setTimeout(() => setIsShaking(false), 300);
+            }
+          }
         }, [soundEnabled]);
         
         // 구슬 배치
         const placeOrb = useCallback((orbToPlace) => {
-            if (gameState !== GAME_STATES.PLAYING) return;
-            
-            let landingY = BOARD_HEIGHT - 1;
-            while (landingY >= 0 && board[landingY][orbToPlace.x]) {
-              landingY--;
-            }
+          if (gameState !== GAME_STATES.PLAYING) return;
+          
+          let landingY = BOARD_HEIGHT - 1;
+          while (landingY >= 0 && board[landingY][orbToPlace.x]) {
+            landingY--;
+          }
 
-            if (landingY < 0) {
-              setGameState(GAME_STATES.GAME_OVER);
-              if (soundEnabled) {
-                playGameOverSound();
-              }
-              return;
-            }
-            
-            // 구슬 떨어지는 사운드
-            if (soundEnabled) {
-              playDropSound();
-            }
-            
-            const newBoard = board.map(row => [...row]);
-            newBoard[landingY][orbToPlace.x] = orbToPlace.color;
-            
-            setCurrentOrb(null);
-            setBoard(newBoard);
-            checkForMatchesAndClear(newBoard);
+          if (landingY < 0) {
+            setGameState(GAME_STATES.GAME_OVER);
+            if (soundEnabled) playGameOverSound();
+            return;
+          }
+          
+          if (soundEnabled) playDropSound();
+          
+          const newBoard = board.map(row => [...row]);
+          newBoard[landingY][orbToPlace.x] = orbToPlace.color;
+          
+          setCurrentOrb(null);
+          setBoard(newBoard);
+          
+          // 다음 프레임에서 매치 체크
+          setTimeout(() => checkForMatchesAndClear(newBoard), 50);
         }, [board, checkForMatchesAndClear, soundEnabled, gameState]);
 
-        // 게임 루프
+        // 최적화된 게임 루프
         useEffect(() => {
           if (gameState !== GAME_STATES.PLAYING) {
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
@@ -494,13 +377,14 @@
           }
           
           if (!currentOrb) {
-            setTimeout(createNewOrb, 100);
-            return;
+            const timer = setTimeout(createNewOrb, 100);
+            return () => clearTimeout(timer);
           }
           
           gameLoopRef.current = setInterval(() => {
             setCurrentOrb(orb => {
               if (!orb || gameState !== GAME_STATES.PLAYING) return null;
+              
               let landingY = BOARD_HEIGHT - 1;
               while (landingY >= 0 && board[landingY][orb.x]) {
                 landingY--;
@@ -523,6 +407,7 @@
         useEffect(() => {
           const handleKeyDown = (e) => {
             if (gameState !== GAME_STATES.PLAYING || !currentOrb) return;
+            
             let newX = currentOrb.x;
             if (e.key === 'ArrowLeft') newX--;
             if (e.key === 'ArrowRight') newX++;
@@ -535,22 +420,23 @@
               setCurrentOrb({ ...currentOrb, x: newX });
             }
           };
+          
           window.addEventListener('keydown', handleKeyDown);
           return () => window.removeEventListener('keydown', handleKeyDown);
         }, [currentOrb, gameState, placeOrb, board]);
 
         // 컬럼 클릭 처리
-        const handleColumnClick = (colIndex) => {
+        const handleColumnClick = useCallback((colIndex) => {
           if (gameState !== GAME_STATES.PLAYING || !currentOrb) return;
           if (gameLoopRef.current) clearInterval(gameLoopRef.current);
           const orbToPlace = { ...currentOrb, x: colIndex };
           placeOrb(orbToPlace);
-        };
+        }, [gameState, currentOrb, placeOrb]);
 
         // 사운드 토글
-        const toggleSound = () => {
+        const toggleSound = useCallback(() => {
           setSoundEnabled(!soundEnabled);
-        };
+        }, [soundEnabled]);
 
         // 시작 화면 렌더링
         if (gameState === GAME_STATES.MENU) {
@@ -566,14 +452,14 @@
         // 게임 화면 렌더링
         return (
           <div className={`flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select ${isShaking ? 'shake' : ''}`}>
-            <h1 className={`text-5xl font-bold mb-4 text-purple-400 ${combo > 0 ? 'combo-bounce' : ''}`}>
+            <h1 className="text-4xl font-bold mb-4 text-purple-400">
               컬러 스택
-              {combo > 1 && <span className="text-yellow-400 text-3xl ml-2 animate-bounce">x{combo} 콤보!</span>}
+              {combo > 1 && <span className="text-yellow-400 text-2xl ml-2">x{combo} 콤보!</span>}
             </h1>
             
-            <div className="flex items-start gap-8">
+            <div className="flex items-start gap-6">
               <div 
-                className={`relative grid gap-1 p-2 rounded-lg shadow-2xl transition-all duration-300 ${
+                className={`relative grid gap-1 p-2 rounded-lg shadow-xl transition-all duration-200 ${
                   isDangerZone ? 'danger-zone danger-shake' : 'bg-gray-800'
                 }`}
                 style={{
@@ -584,72 +470,68 @@
                   row.map((cell, x) => (
                     <div 
                       key={`${y}-${x}`} 
-                      className="w-12 h-12 bg-gray-700/50 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600/50 transition-colors"
+                      className="w-11 h-11 bg-gray-700/50 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600/50 transition-colors"
                       onClick={() => handleColumnClick(x)}
                     >
                       {cell && (
-                        <div 
-                          className={`w-11 h-11 ${ORB_COLORS[cell]} rounded-full shadow-inner transition-all ${
-                            clearingCells.has(`${y},${x}`) ? 'pop-effect' : ''
-                          }`}
-                        ></div>
+                        <div className={`w-10 h-10 ${ORB_COLORS[cell]} rounded-full shadow-inner`}></div>
                       )}
                     </div>
                   ))
                 )}
                 {currentOrb && (
                   <div 
-                      className="absolute w-12 h-12 flex items-center justify-center transition-all duration-75"
+                      className="absolute w-11 h-11 flex items-center justify-center transition-all duration-75"
                       style={{
-                        top: `${8 + currentOrb.y * 52}px`,
-                        left: `${8 + currentOrb.x * 52}px`,
+                        top: `${8 + currentOrb.y * 48}px`,
+                        left: `${8 + currentOrb.x * 48}px`,
                         pointerEvents: 'none'
                       }}
                     >
-                      <div className={`w-11 h-11 ${ORB_COLORS[currentOrb.color]} rounded-full shadow-lg animate-pulse`}></div>
+                      <div className={`w-10 h-10 ${ORB_COLORS[currentOrb.color]} rounded-full shadow-lg animate-pulse`}></div>
                   </div>
                 )}
               </div>
 
-              <div className="w-48 flex flex-col gap-4">
-                <div className="bg-gray-800 p-4 rounded-lg text-center">
-                  <h2 className="text-xl font-bold mb-2 text-purple-300">점수</h2>
-                  <p className="text-4xl font-bold text-yellow-400">{score}</p>
+              <div className="w-44 flex flex-col gap-3">
+                <div className="bg-gray-800 p-3 rounded-lg text-center">
+                  <h2 className="text-lg font-bold mb-1 text-purple-300">점수</h2>
+                  <p className="text-3xl font-bold text-yellow-400">{score}</p>
                 </div>
                 
-                <div className="bg-gray-800 p-4 rounded-lg text-center">
-                  <h2 className="text-xl font-bold mb-2 text-purple-300">다음 블록</h2>
-                  <div className="flex justify-center items-center mt-2">
-                    <div className={`w-12 h-12 ${ORB_COLORS[nextOrbColor]} rounded-full shadow-lg`}></div>
+                <div className="bg-gray-800 p-3 rounded-lg text-center">
+                  <h2 className="text-lg font-bold mb-1 text-purple-300">다음 블록</h2>
+                  <div className="flex justify-center items-center mt-1">
+                    <div className={`w-10 h-10 ${ORB_COLORS[nextOrbColor]} rounded-full shadow-lg`}></div>
                   </div>
                 </div>
                 
                 {combo > 1 && (
-                  <div className="bg-gradient-to-r from-yellow-600 to-red-600 p-4 rounded-lg text-center animate-pulse">
-                    <h2 className="text-xl font-bold mb-2 text-white">🎉 콤보!</h2>
-                    <p className="text-3xl font-bold text-yellow-100">x{combo}</p>
+                  <div className="bg-gradient-to-r from-yellow-600 to-red-600 p-3 rounded-lg text-center">
+                    <h2 className="text-lg font-bold mb-1 text-white">🎉 콤보!</h2>
+                    <p className="text-2xl font-bold text-yellow-100">x{combo}</p>
                   </div>
                 )}
                 
                 {isDangerZone && (
-                  <div className="bg-red-700 p-4 rounded-lg text-center border-2 border-red-500 animate-pulse">
-                    <h2 className="text-xl font-bold mb-2 text-red-100">⚠️ 위험!</h2>
+                  <div className="bg-red-700 p-3 rounded-lg text-center border-2 border-red-500">
+                    <h2 className="text-lg font-bold mb-1 text-red-100">⚠️ 위험!</h2>
                     <p className="text-sm text-red-200">구슬이 너무 높아요!</p>
                   </div>
                 )}
                 
                 <button 
                   onClick={toggleSound}
-                  className={`w-full font-bold py-2 px-4 rounded-lg text-lg transition-colors ${
+                  className={`w-full font-bold py-2 px-3 rounded-lg text-base transition-colors ${
                     soundEnabled 
                       ? 'bg-green-600 hover:bg-green-700 text-white' 
                       : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
                   }`}
                 >
-                  {soundEnabled ? '🔊' : '🔇'} 사운드 {soundEnabled ? 'ON' : 'OFF'}
+                  {soundEnabled ? '🔊' : '🔇'} 사운드
                 </button>
                 
-                <button onClick={goToMenu} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg text-xl transition-colors">
+                <button onClick={goToMenu} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 rounded-lg text-base transition-colors">
                   메인 메뉴
                 </button>
               </div>
@@ -657,13 +539,13 @@
 
             {gameState === GAME_STATES.GAME_OVER && (
               <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col justify-center items-center">
-                <h2 className="text-6xl font-bold text-red-500 mb-4">게임 종료</h2>
-                <p className="text-3xl mb-8">최종 점수: <span className="text-yellow-400">{score}</span></p>
+                <h2 className="text-5xl font-bold text-red-500 mb-4">게임 종료</h2>
+                <p className="text-2xl mb-6">최종 점수: <span className="text-yellow-400">{score}</span></p>
                 <div className="flex gap-4">
-                  <button onClick={startGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
+                  <button onClick={startGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg text-xl transition-colors">
                     다시 하기
                   </button>
-                  <button onClick={goToMenu} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
+                  <button onClick={goToMenu} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl transition-colors">
                     메인 메뉴
                   </button>
                 </div>
