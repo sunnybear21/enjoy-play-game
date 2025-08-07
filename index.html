@@ -49,6 +49,14 @@
         0%, 100% { transform: scale(1); }
         50% { transform: scale(1.1); }
       }
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+      }
+      @keyframes glow {
+        0%, 100% { box-shadow: 0 0 20px rgba(147, 51, 234, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(147, 51, 234, 0.8); }
+      }
       .shake {
         animation: shake 0.5s ease-in-out;
       }
@@ -61,9 +69,28 @@
       .combo-bounce {
         animation: combo-bounce 0.4s ease-in-out;
       }
+      .float {
+        animation: float 3s ease-in-out infinite;
+      }
+      .glow {
+        animation: glow 2s ease-in-out infinite;
+      }
       .danger-zone {
         background: linear-gradient(135deg, #7f1d1d, #991b1b, #b91c1c);
         box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+      }
+      .title-gradient {
+        background: linear-gradient(45deg, #8b5cf6, #06b6d4, #10b981, #f59e0b, #ef4444);
+        background-size: 300% 300%;
+        animation: gradient-shift 3s ease infinite;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
       }
     </style>
 </head>
@@ -90,6 +117,14 @@
         purple: 'bg-purple-500',
       };
       const DROP_INTERVAL = 500;
+
+      // 게임 상태
+      const GAME_STATES = {
+        MENU: 'menu',
+        PLAYING: 'playing',
+        PAUSED: 'paused',
+        GAME_OVER: 'game_over'
+      };
 
       // 사운드 생성 함수들
       const playDropSound = () => {
@@ -171,18 +206,103 @@
         }
       };
 
+      const playStartSound = () => {
+        try {
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const frequencies = [262, 330, 392, 523]; // C4, E4, G4, C5
+          
+          frequencies.forEach((freq, i) => {
+            setTimeout(() => {
+              const oscillator = audioContext.createOscillator();
+              const gainNode = audioContext.createGain();
+              
+              oscillator.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              
+              oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+              oscillator.type = 'triangle';
+              
+              gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+              
+              oscillator.start();
+              oscillator.stop(audioContext.currentTime + 0.4);
+            }, i * 150);
+          });
+        } catch (e) {
+          console.log('Sound not available');
+        }
+      };
+
       // 빈 보드 생성
       const createEmptyBoard = () => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
 
       // 랜덤 색상 선택
       const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
+      // 시작 화면 컴포넌트
+      function StartScreen({ onStart, soundEnabled, onToggleSound }) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select">
+            <div className="text-center">
+              <h1 className="text-8xl font-bold mb-8 title-gradient">
+                컬러 스택
+              </h1>
+              
+              <div className="flex justify-center gap-4 mb-8">
+                {COLORS.map((color, index) => (
+                  <div 
+                    key={color}
+                    className={`w-16 h-16 ${ORB_COLORS[color]} rounded-full shadow-lg float`}
+                    style={{animationDelay: `${index * 0.5}s`}}
+                  ></div>
+                ))}
+              </div>
+
+              <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl mb-8 max-w-md mx-auto">
+                <h2 className="text-3xl font-bold mb-6 text-purple-400">게임 방법</h2>
+                <div className="text-left space-y-3 text-lg">
+                  <p>🎯 같은 색깔 구슬 <span className="text-yellow-400 font-bold">5개 이상</span> 연결하기</p>
+                  <p>⬅️➡️ 화살표 키로 구슬 이동</p>
+                  <p>⬇️ 화살표 키로 빠른 낙하</p>
+                  <p>🖱️ 마우스 클릭으로 위치 선택</p>
+                  <p>🔗 연쇄 반응으로 더 높은 점수!</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4 items-center">
+                <button 
+                  onClick={() => {
+                    if (soundEnabled) playStartSound();
+                    onStart();
+                  }}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold py-4 px-12 rounded-2xl text-3xl transition-all transform hover:scale-105 glow"
+                >
+                  🎮 게임 시작
+                </button>
+                
+                <button 
+                  onClick={onToggleSound}
+                  className={`font-bold py-3 px-8 rounded-xl text-xl transition-colors ${
+                    soundEnabled 
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  {soundEnabled ? '🔊' : '🔇'} 사운드 {soundEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       function App() {
+        const [gameState, setGameState] = useState(GAME_STATES.MENU);
         const [board, setBoard] = useState(createEmptyBoard());
         const [currentOrb, setCurrentOrb] = useState(null);
         const [nextOrbColor, setNextOrbColor] = useState(getRandomColor());
         const [score, setScore] = useState(0);
-        const [isGameOver, setIsGameOver] = useState(false);
         const [isShaking, setIsShaking] = useState(false);
         const [isDangerZone, setIsDangerZone] = useState(false);
         const [combo, setCombo] = useState(0);
@@ -193,17 +313,40 @@
 
         // 위험 구역 체크 (상위 3줄에 구슬이 있으면)
         useEffect(() => {
-          const dangerZoneCheck = board.slice(0, 3).some(row => row.some(cell => cell !== null));
-          setIsDangerZone(dangerZoneCheck);
-        }, [board]);
+          if (gameState === GAME_STATES.PLAYING) {
+            const dangerZoneCheck = board.slice(0, 3).some(row => row.some(cell => cell !== null));
+            setIsDangerZone(dangerZoneCheck);
+          }
+        }, [board, gameState]);
+
+        // 게임 시작
+        const startGame = () => {
+          setGameState(GAME_STATES.PLAYING);
+          setBoard(createEmptyBoard());
+          setScore(0);
+          setCurrentOrb(null);
+          setNextOrbColor(getRandomColor());
+          setCombo(0);
+          setIsShaking(false);
+          setIsDangerZone(false);
+          setClearingCells(new Set());
+        };
+
+        // 메뉴로 돌아가기
+        const goToMenu = () => {
+          setGameState(GAME_STATES.MENU);
+          if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+        };
 
         // 새 구슬 생성
         const createNewOrb = useCallback(() => {
+          if (gameState !== GAME_STATES.PLAYING) return;
+          
           const newColor = nextOrbColor;
           const newOrb = { x: Math.floor(BOARD_WIDTH / 2), y: 0, color: newColor };
           
           if (board[newOrb.y][newOrb.x]) {
-            setIsGameOver(true);
+            setGameState(GAME_STATES.GAME_OVER);
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
             if (soundEnabled) {
               playGameOverSound();
@@ -213,7 +356,7 @@
           
           setCurrentOrb(newOrb);
           setNextOrbColor(getRandomColor());
-        }, [board, nextOrbColor, soundEnabled]);
+        }, [board, nextOrbColor, soundEnabled, gameState]);
         
         // 매치 확인 및 제거
         const checkForMatchesAndClear = useCallback((boardToCheck) => {
@@ -315,13 +458,15 @@
         
         // 구슬 배치
         const placeOrb = useCallback((orbToPlace) => {
+            if (gameState !== GAME_STATES.PLAYING) return;
+            
             let landingY = BOARD_HEIGHT - 1;
             while (landingY >= 0 && board[landingY][orbToPlace.x]) {
               landingY--;
             }
 
             if (landingY < 0) {
-              setIsGameOver(true);
+              setGameState(GAME_STATES.GAME_OVER);
               if (soundEnabled) {
                 playGameOverSound();
               }
@@ -339,14 +484,15 @@
             setCurrentOrb(null);
             setBoard(newBoard);
             checkForMatchesAndClear(newBoard);
-        }, [board, checkForMatchesAndClear, soundEnabled]);
+        }, [board, checkForMatchesAndClear, soundEnabled, gameState]);
 
         // 게임 루프
         useEffect(() => {
-          if (isGameOver) {
+          if (gameState !== GAME_STATES.PLAYING) {
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
             return;
           }
+          
           if (!currentOrb) {
             setTimeout(createNewOrb, 100);
             return;
@@ -354,7 +500,7 @@
           
           gameLoopRef.current = setInterval(() => {
             setCurrentOrb(orb => {
-              if (!orb) return null;
+              if (!orb || gameState !== GAME_STATES.PLAYING) return null;
               let landingY = BOARD_HEIGHT - 1;
               while (landingY >= 0 && board[landingY][orb.x]) {
                 landingY--;
@@ -371,12 +517,12 @@
           return () => {
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
           };
-        }, [currentOrb, isGameOver, board, createNewOrb, placeOrb]);
+        }, [currentOrb, gameState, board, createNewOrb, placeOrb]);
         
         // 키보드 입력 처리
         useEffect(() => {
           const handleKeyDown = (e) => {
-            if (isGameOver || !currentOrb) return;
+            if (gameState !== GAME_STATES.PLAYING || !currentOrb) return;
             let newX = currentOrb.x;
             if (e.key === 'ArrowLeft') newX--;
             if (e.key === 'ArrowRight') newX++;
@@ -391,27 +537,14 @@
           };
           window.addEventListener('keydown', handleKeyDown);
           return () => window.removeEventListener('keydown', handleKeyDown);
-        }, [currentOrb, isGameOver, placeOrb, board]);
+        }, [currentOrb, gameState, placeOrb, board]);
 
         // 컬럼 클릭 처리
         const handleColumnClick = (colIndex) => {
-          if (isGameOver || !currentOrb) return;
+          if (gameState !== GAME_STATES.PLAYING || !currentOrb) return;
           if (gameLoopRef.current) clearInterval(gameLoopRef.current);
           const orbToPlace = { ...currentOrb, x: colIndex };
           placeOrb(orbToPlace);
-        };
-
-        // 게임 재시작
-        const restartGame = () => {
-          setBoard(createEmptyBoard());
-          setScore(0);
-          setIsGameOver(false);
-          setCurrentOrb(null);
-          setNextOrbColor(getRandomColor());
-          setCombo(0);
-          setIsShaking(false);
-          setIsDangerZone(false);
-          setClearingCells(new Set());
         };
 
         // 사운드 토글
@@ -419,6 +552,18 @@
           setSoundEnabled(!soundEnabled);
         };
 
+        // 시작 화면 렌더링
+        if (gameState === GAME_STATES.MENU) {
+          return (
+            <StartScreen 
+              onStart={startGame}
+              soundEnabled={soundEnabled}
+              onToggleSound={toggleSound}
+            />
+          );
+        }
+
+        // 게임 화면 렌더링
         return (
           <div className={`flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select ${isShaking ? 'shake' : ''}`}>
             <h1 className={`text-5xl font-bold mb-4 text-purple-400 ${combo > 0 ? 'combo-bounce' : ''}`}>
@@ -504,26 +649,24 @@
                   {soundEnabled ? '🔊' : '🔇'} 사운드 {soundEnabled ? 'ON' : 'OFF'}
                 </button>
                 
-                <div className="bg-gray-800 p-4 rounded-lg text-center">
-                  <h3 className="text-lg font-bold mb-2 text-green-300">조작법</h3>
-                  <p className="text-sm">← → 이동</p>
-                  <p className="text-sm">↓ 빠른 낙하</p>
-                  <p className="text-sm">클릭으로 위치 선택</p>
-                </div>
-                
-                <button onClick={restartGame} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-xl transition-colors">
-                  다시 시작
+                <button onClick={goToMenu} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg text-xl transition-colors">
+                  메인 메뉴
                 </button>
               </div>
             </div>
 
-            {isGameOver && (
+            {gameState === GAME_STATES.GAME_OVER && (
               <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col justify-center items-center">
                 <h2 className="text-6xl font-bold text-red-500 mb-4">게임 종료</h2>
                 <p className="text-3xl mb-8">최종 점수: <span className="text-yellow-400">{score}</span></p>
-                <button onClick={restartGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
-                  다시 하기
-                </button>
+                <div className="flex gap-4">
+                  <button onClick={startGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
+                    다시 하기
+                  </button>
+                  <button onClick={goToMenu} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
+                    메인 메뉴
+                  </button>
+                </div>
               </div>
             )}
           </div>
