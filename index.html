@@ -1,7 +1,6 @@
-
 <!DOCTYPE html>
 <html lang="ko">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>컬러 스택</title>
@@ -14,38 +13,75 @@
         font-family: 'Gaegu', cursive;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        background-color: #1a202c; /* A dark background for the game */
+        background-color: #1a202c;
       }
-      /* Prevent text selection on the game board */
       .no-select {
-        -webkit-touch-callout: none; /* iOS Safari */
-        -webkit-user-select: none; /* Safari, Chrome, Opera, Edge */
-        -khtml-user-select: none; /* Konqueror HTML */
-        -moz-user-select: none; /* Old versions of Firefox */
-        -ms-user-select: none; /* Internet Explorer/Edge */
-        user-select: none; /* Non-prefixed version, currently supported by Chrome, Opera and Firefox */
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-2px); }
+        75% { transform: translateX(2px); }
+      }
+      @keyframes danger-shake {
+        0%, 100% { transform: translateX(0) translateY(0); }
+        10% { transform: translateX(-3px) translateY(-1px); }
+        20% { transform: translateX(3px) translateY(1px); }
+        30% { transform: translateX(-3px) translateY(-1px); }
+        40% { transform: translateX(3px) translateY(1px); }
+        50% { transform: translateX(-2px) translateY(-1px); }
+        60% { transform: translateX(2px) translateY(1px); }
+        70% { transform: translateX(-2px) translateY(-1px); }
+        80% { transform: translateX(2px) translateY(1px); }
+        90% { transform: translateX(-1px) translateY(0px); }
+      }
+      @keyframes pop-effect {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); opacity: 0.8; }
+        100% { transform: scale(0); opacity: 0; }
+      }
+      @keyframes combo-bounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+      .shake {
+        animation: shake 0.5s ease-in-out;
+      }
+      .danger-shake {
+        animation: danger-shake 0.3s ease-in-out infinite;
+      }
+      .pop-effect {
+        animation: pop-effect 0.6s ease-out forwards;
+      }
+      .combo-bounce {
+        animation: combo-bounce 0.3s ease-in-out;
+      }
+      .danger-zone {
+        background: linear-gradient(45deg, #7f1d1d, #991b1b);
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
       }
     </style>
-  <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
+<body>
     <div id="root"></div>
 
-    <!-- Babel to transpile JSX in the browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     
-    <!-- React and Game Logic -->
-    <script type="text/babel" data-type="module">
-      import React, { useState, useEffect, useCallback, useRef } from 'https://esm.sh/react@^19.1.1';
-      import ReactDOM from 'https://esm.sh/react-dom@^19.1.1/client';
+    <script type="text/babel">
+      const { useState, useEffect, useCallback, useRef } = React;
 
-      // --- From constants.ts ---
+      // 게임 상수들
       const BOARD_WIDTH = 6;
       const BOARD_HEIGHT = 10;
       const MATCH_THRESHOLD = 5;
-
       const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
-
       const ORB_COLORS = {
         red: 'bg-red-500',
         blue: 'bg-blue-500',
@@ -53,12 +89,80 @@
         yellow: 'bg-yellow-400',
         purple: 'bg-purple-500',
       };
-
       const DROP_INTERVAL = 500;
 
-      // --- From App.tsx ---
+      // 사운드 생성 함수들
+      const createAudioContext = () => {
+        return new (window.AudioContext || window.webkitAudioContext)();
+      };
+
+      const playDropSound = (audioContext) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.1);
+        
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+      };
+
+      const playMatchSound = (audioContext, combo = 1) => {
+        const frequencies = [523, 659, 784, 988, 1175]; // C5, E5, G5, B5, D6
+        
+        for (let i = 0; i < combo && i < 5; i++) {
+          setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(frequencies[i], audioContext.currentTime);
+            oscillator.type = 'triangle';
+            
+            gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+          }, i * 100);
+        }
+      };
+
+      const playGameOverSound = (audioContext) => {
+        const frequencies = [330, 277, 247, 220];
+        
+        frequencies.forEach((freq, i) => {
+          setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscillator.type = 'sawtooth';
+            
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+          }, i * 200);
+        });
+      };
+
+      // 빈 보드 생성
       const createEmptyBoard = () => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
 
+      // 랜덤 색상 선택
       const getRandomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
       function App() {
@@ -67,9 +171,34 @@
         const [nextOrbColor, setNextOrbColor] = useState(getRandomColor());
         const [score, setScore] = useState(0);
         const [isGameOver, setIsGameOver] = useState(false);
+        const [isShaking, setIsShaking] = useState(false);
+        const [isDangerZone, setIsDangerZone] = useState(false);
+        const [combo, setCombo] = useState(0);
+        const [soundEnabled, setSoundEnabled] = useState(true);
+        const [clearingCells, setClearingCells] = useState(new Set());
         
         const gameLoopRef = useRef(null);
+        const audioContextRef = useRef(null);
 
+        // 오디오 컨텍스트 초기화
+        useEffect(() => {
+          if (soundEnabled && !audioContextRef.current) {
+            try {
+              audioContextRef.current = createAudioContext();
+            } catch (e) {
+              console.log('Audio not supported');
+              setSoundEnabled(false);
+            }
+          }
+        }, [soundEnabled]);
+
+        // 위험 구역 체크 (상위 3줄에 구슬이 있으면)
+        useEffect(() => {
+          const dangerZoneCheck = board.slice(0, 3).some(row => row.some(cell => cell !== null));
+          setIsDangerZone(dangerZoneCheck);
+        }, [board]);
+
+        // 새 구슬 생성
         const createNewOrb = useCallback(() => {
           const newColor = nextOrbColor;
           const newOrb = { x: Math.floor(BOARD_WIDTH / 2), y: 0, color: newColor };
@@ -77,21 +206,24 @@
           if (board[newOrb.y][newOrb.x]) {
             setIsGameOver(true);
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
+            if (soundEnabled && audioContextRef.current) {
+              playGameOverSound(audioContextRef.current);
+            }
             return;
           }
           
           setCurrentOrb(newOrb);
           setNextOrbColor(getRandomColor());
-        }, [board, nextOrbColor]);
+        }, [board, nextOrbColor, soundEnabled]);
         
+        // 매치 확인 및 제거
         const checkForMatchesAndClear = useCallback((boardToCheck) => {
           let newBoard = boardToCheck.map(r => [...r]);
           let totalCleared = 0;
-          let combo = 1;
+          let comboCount = 0;
 
           const checkAndClear = () => {
               let boardAfterClears = newBoard.map(r => [...r]);
-              let clearedInThisPass = 0;
               
               const toClear = new Set();
               const visited = new Set();
@@ -128,31 +260,48 @@
               }
               
               if (toClear.size > 0) {
-                  clearedInThisPass = toClear.size;
-                  totalCleared += clearedInThisPass * combo;
-                  combo++;
+                  comboCount++;
+                  totalCleared += toClear.size * comboCount;
+                  
+                  // 사라질 구슬들 표시
+                  setClearingCells(toClear);
+                  
+                  setTimeout(() => {
+                    toClear.forEach(coord => {
+                        const [clearY, clearX] = coord.split(',').map(Number);
+                        boardAfterClears[clearY][clearX] = null;
+                    });
 
-                  toClear.forEach(coord => {
-                      const [clearY, clearX] = coord.split(',').map(Number);
-                      boardAfterClears[clearY][clearX] = null;
-                  });
+                    // 중력 적용
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        let emptyRow = BOARD_HEIGHT - 1;
+                        for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                            if (boardAfterClears[y][x]) {
+                                if (y !== emptyRow) {
+                                  [boardAfterClears[emptyRow][x], boardAfterClears[y][x]] = [boardAfterClears[y][x], boardAfterClears[emptyRow][x]];
+                                }
+                                emptyRow--;
+                            }
+                        }
+                    }
+                    newBoard = boardAfterClears;
+                    setClearingCells(new Set());
+                    
+                    // 사운드 재생
+                    if (soundEnabled && audioContextRef.current) {
+                      playMatchSound(audioContextRef.current, comboCount);
+                    }
+                    
+                    // 화면 흔들기
+                    if (comboCount > 1) {
+                      setIsShaking(true);
+                      setTimeout(() => setIsShaking(false), 500);
+                    }
+                  }, 300);
 
-                  // Gravity
-                  for (let x = 0; x < BOARD_WIDTH; x++) {
-                      let emptyRow = BOARD_HEIGHT - 1;
-                      for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
-                          if (boardAfterClears[y][x]) {
-                              if (y !== emptyRow) {
-                                [boardAfterClears[emptyRow][x], boardAfterClears[y][x]] = [boardAfterClears[y][x], boardAfterClears[emptyRow][x]];
-                              }
-                              emptyRow--;
-                          }
-                      }
-                  }
-                  newBoard = boardAfterClears;
-                  return true; // Found and cleared matches
+                  return true;
               }
-              return false; // No matches found
+              return false;
           };
 
           let keepChecking = true;
@@ -160,10 +309,15 @@
               keepChecking = checkAndClear();
           }
           
+          setCombo(comboCount);
           setScore(s => s + totalCleared * 10);
-          setBoard(newBoard);
-        }, []);
+          
+          setTimeout(() => {
+            setBoard(newBoard);
+          }, 400);
+        }, [soundEnabled]);
         
+        // 구슬 배치
         const placeOrb = useCallback((orbToPlace) => {
             let landingY = BOARD_HEIGHT - 1;
             while (landingY >= 0 && board[landingY][orbToPlace.x]) {
@@ -172,7 +326,15 @@
 
             if (landingY < 0) {
               setIsGameOver(true);
+              if (soundEnabled && audioContextRef.current) {
+                playGameOverSound(audioContextRef.current);
+              }
               return;
+            }
+            
+            // 구슬 떨어지는 사운드
+            if (soundEnabled && audioContextRef.current) {
+              playDropSound(audioContextRef.current);
             }
             
             const newBoard = board.map(row => [...row]);
@@ -180,9 +342,9 @@
             
             setCurrentOrb(null);
             checkForMatchesAndClear(newBoard);
-        }, [board, checkForMatchesAndClear]);
+        }, [board, checkForMatchesAndClear, soundEnabled]);
 
-        // Game Loop
+        // 게임 루프
         useEffect(() => {
           if (isGameOver) {
             if (gameLoopRef.current) clearInterval(gameLoopRef.current);
@@ -214,7 +376,7 @@
           };
         }, [currentOrb, isGameOver, board, createNewOrb, placeOrb]);
         
-        // Input Handler
+        // 키보드 입력 처리
         useEffect(() => {
           const handleKeyDown = (e) => {
             if (isGameOver || !currentOrb) return;
@@ -234,6 +396,7 @@
           return () => window.removeEventListener('keydown', handleKeyDown);
         }, [currentOrb, isGameOver, placeOrb, board]);
 
+        // 컬럼 클릭 처리
         const handleColumnClick = (colIndex) => {
           if (isGameOver || !currentOrb) return;
           if (gameLoopRef.current) clearInterval(gameLoopRef.current);
@@ -241,21 +404,43 @@
           placeOrb(orbToPlace);
         };
 
+        // 게임 재시작
         const restartGame = () => {
           setBoard(createEmptyBoard());
           setScore(0);
           setIsGameOver(false);
           setCurrentOrb(null);
           setNextOrbColor(getRandomColor());
+          setCombo(0);
+          setIsShaking(false);
+          setIsDangerZone(false);
+          setClearingCells(new Set());
+        };
+
+        // 사운드 토글
+        const toggleSound = () => {
+          setSoundEnabled(!soundEnabled);
+          if (!soundEnabled && !audioContextRef.current) {
+            try {
+              audioContextRef.current = createAudioContext();
+            } catch (e) {
+              console.log('Audio not supported');
+            }
+          }
         };
 
         return (
-          <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select">
-            <h1 className="text-5xl font-bold mb-4 text-purple-400">컬러 스택</h1>
+          <div className={`flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4 no-select ${isShaking ? 'shake' : ''}`}>
+            <h1 className={`text-5xl font-bold mb-4 text-purple-400 ${combo > 0 ? 'combo-bounce' : ''}`}>
+              컬러 스택
+              {combo > 1 && <span className="text-yellow-400 text-3xl ml-2">x{combo} 콤보!</span>}
+            </h1>
             
             <div className="flex items-start gap-8">
               <div 
-                className="relative grid gap-1 bg-gray-800 p-2 rounded-lg shadow-2xl"
+                className={`relative grid gap-1 p-2 rounded-lg shadow-2xl transition-all duration-300 ${
+                  isDangerZone ? 'danger-zone danger-shake' : 'bg-gray-800'
+                }`}
                 style={{
                   gridTemplateColumns: `repeat(${BOARD_WIDTH}, 1fr)`,
                 }}
@@ -264,10 +449,16 @@
                   row.map((cell, x) => (
                     <div 
                       key={`${y}-${x}`} 
-                      className="w-12 h-12 bg-gray-700/50 rounded-full flex items-center justify-center cursor-pointer"
+                      className="w-12 h-12 bg-gray-700/50 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600/50 transition-colors"
                       onClick={() => handleColumnClick(x)}
                     >
-                      {cell && <div className={`w-11 h-11 ${ORB_COLORS[cell]} rounded-full shadow-inner`}></div>}
+                      {cell && (
+                        <div 
+                          className={`w-11 h-11 ${ORB_COLORS[cell]} rounded-full shadow-inner transition-all ${
+                            clearingCells.has(`${y},${x}`) ? 'pop-effect' : ''
+                          }`}
+                        ></div>
+                      )}
                     </div>
                   ))
                 )}
@@ -280,7 +471,7 @@
                         pointerEvents: 'none'
                       }}
                     >
-                      <div className={`w-11 h-11 ${ORB_COLORS[currentOrb.color]} rounded-full shadow-lg`}></div>
+                      <div className={`w-11 h-11 ${ORB_COLORS[currentOrb.color]} rounded-full shadow-lg animate-pulse`}></div>
                   </div>
                 )}
               </div>
@@ -288,14 +479,48 @@
               <div className="w-48 flex flex-col gap-4">
                 <div className="bg-gray-800 p-4 rounded-lg text-center">
                   <h2 className="text-xl font-bold mb-2 text-purple-300">점수</h2>
-                  <p className="text-4xl font-bold">{score}</p>
+                  <p className="text-4xl font-bold text-yellow-400">{score}</p>
                 </div>
+                
                 <div className="bg-gray-800 p-4 rounded-lg text-center">
                   <h2 className="text-xl font-bold mb-2 text-purple-300">다음 블록</h2>
                   <div className="flex justify-center items-center mt-2">
                     <div className={`w-12 h-12 ${ORB_COLORS[nextOrbColor]} rounded-full shadow-lg`}></div>
                   </div>
                 </div>
+                
+                {combo > 1 && (
+                  <div className="bg-gradient-to-r from-yellow-600 to-red-600 p-4 rounded-lg text-center">
+                    <h2 className="text-xl font-bold mb-2 text-white">콤보!</h2>
+                    <p className="text-3xl font-bold text-yellow-100">x{combo}</p>
+                  </div>
+                )}
+                
+                {isDangerZone && (
+                  <div className="bg-red-700 p-4 rounded-lg text-center border-2 border-red-500">
+                    <h2 className="text-xl font-bold mb-2 text-red-100">⚠️ 위험!</h2>
+                    <p className="text-sm text-red-200">구슬이 너무 높아요!</p>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={toggleSound}
+                  className={`w-full font-bold py-2 px-4 rounded-lg text-lg transition-colors ${
+                    soundEnabled 
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-gray-600 hover:bg-gray-700 text-gray-300'
+                  }`}
+                >
+                  🔊 사운드 {soundEnabled ? 'ON' : 'OFF'}
+                </button>
+                
+                <div className="bg-gray-800 p-4 rounded-lg text-center">
+                  <h3 className="text-lg font-bold mb-2 text-green-300">조작법</h3>
+                  <p className="text-sm">← → 이동</p>
+                  <p className="text-sm">↓ 빠른 낙하</p>
+                  <p className="text-sm">클릭으로 위치 선택</p>
+                </div>
+                
                 <button onClick={restartGame} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg text-xl transition-colors">
                   다시 시작
                 </button>
@@ -305,7 +530,7 @@
             {isGameOver && (
               <div className="absolute inset-0 bg-black bg-opacity-70 flex flex-col justify-center items-center">
                 <h2 className="text-6xl font-bold text-red-500 mb-4">게임 종료</h2>
-                <p className="text-3xl mb-8">최종 점수: {score}</p>
+                <p className="text-3xl mb-8">최종 점수: <span className="text-yellow-400">{score}</span></p>
                 <button onClick={restartGame} className="bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-2xl transition-colors">
                   다시 하기
                 </button>
@@ -315,19 +540,10 @@
         );
       }
 
-      // --- From index.tsx ---
+      // 렌더링
       const rootElement = document.getElementById('root');
-      if (!rootElement) {
-        throw new Error("Could not find root element to mount to");
-      }
-
       const root = ReactDOM.createRoot(rootElement);
-      root.render(
-        <React.StrictMode>
-          <App />
-        </React.StrictMode>
-      );
+      root.render(React.createElement(App));
     </script>
-  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
